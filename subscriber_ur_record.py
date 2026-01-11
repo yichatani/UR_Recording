@@ -18,6 +18,9 @@ import re
 import shutil
 import json
 from datetime import datetime
+from lerobot.datasets.lerobot_dataset import LeRobotDataset
+
+print("Starting subscriber_ur_record.py...")
 
 wrist_color_array, global_color_array = [], []  # color_array → wrist_color_array
 wrist_depth_array = []
@@ -25,11 +28,100 @@ eef_pose_array = []
 wrist_color_ts_array, global_color_ts_array= [], []
 recording = False
 current_time = None
-data_folder = "/home/ani/UR_data_recording/data"
+data_folder = "/home/ani/UR_Recording/data"
 bridge = CvBridge()
 instruction = None
 episode_num = 0
 last_delete_time = 0
+
+
+
+
+
+def build_lerobot_dataset(repo_path, save_depth=True):
+
+        ee_names = [
+            "x",
+            "y",
+            "z",
+            "rx",
+            "ry",
+            "rz",
+            "width",
+        ]
+
+        features_dict = {
+                "rgb_wrist": {
+                    "dtype": "video",
+                    "shape": (224, 224, 3),
+                    "names": ["height", "width", "channel"],
+                },
+                "rgb_global": {
+                    "dtype": "video",
+                    "shape": (224, 224, 3),
+                    "names": ["height", "width", "channel"],
+                },
+                "observation.state": {
+                    "dtype": "float32",
+                    "shape": (7,),
+                    "names": [ee_names],
+                },
+                "action": {
+                    "dtype": "float32",
+                    "shape": (7,),
+                    "names": [ee_names],
+                },
+            }
+        
+        # if self.visualize:
+        #     features_dict["img_show"] = {
+        #         "dtype": "video",
+        #         "shape": (480, 1920, 3),
+        #         "names": ["height", "width", "channel"],
+        #     }
+
+        if save_depth:
+            features_dict["depth_wrist"] = {
+                "dtype": "float32",
+                "shape": (224, 224),
+                "names": ["height", "width"],
+            }
+            features_dict["depth_global"] = {
+                "dtype": "float32",
+                "shape": (224, 224),
+                "names": ["height", "width"],
+            }
+
+        if os.path.exists(repo_path):
+            dataset = LeRobotDataset(
+                repo_id =repo_path,
+            )
+            dataset.start_image_writer(
+                num_processes=2,
+                num_threads=12,
+            )
+            recorded_episodes = dataset.meta.total_episodes
+        else:
+            dataset = LeRobotDataset.create(
+                repo_id=repo_path,
+                robot_type="ur5e",
+                fps=30,
+                features=features_dict,
+                image_writer_threads=12,
+                image_writer_processes=2,
+            )
+        return dataset
+
+
+build_lerobot_dataset("/home/ani/UR_Recording/lerobot_dataset", save_depth=True)
+
+print("AAAA")
+
+exit()
+
+
+
+
 
 ROBOT_HOST = "192.168.56.101"
 
@@ -127,13 +219,14 @@ def callback(wrist_color_msg, wrist_depth_msg, global_color_msg):
     global rtde_r, gripper
 
     wrist_img = bridge.imgmsg_to_cv2(wrist_color_msg, "bgr8")
-    wrist_img = cv2.resize(wrist_img, (640, 384))
+    wrist_img = cv2.resize(wrist_img, (224, 224))
     wrist_ts = wrist_color_msg.header.stamp
 
     wrist_depth = bridge.imgmsg_to_cv2(wrist_depth_msg)
+    wrist_depth = cv2.resize(wrist_depth, (224, 224))
 
     global_img = bridge.imgmsg_to_cv2(global_color_msg, "bgr8")
-    global_img = cv2.resize(global_img, (640, 384))
+    global_img = cv2.resize(global_img, (224, 224))
     global_ts = global_color_msg.header.stamp
 
     eef_pose = rtde_r.getActualTCPPose() # pose = [x, y, z, rx, ry, rz]

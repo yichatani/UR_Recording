@@ -1,5 +1,5 @@
 from rtde_control import RTDEControlInterface
-from rtde_receive import RTDEReceiveInterface 
+# from rtde_receive import RTDEReceiveInterface 
 from rtde_io import RTDEIOInterface as RTDEIO
 import robotiq_gripper
 from spnav import spnav_open, spnav_poll_event, spnav_close, SpnavMotionEvent, SpnavButtonEvent
@@ -120,7 +120,7 @@ def main():
     sm.start()
     # Initialize RTDEControlInterface
     rtde_c = RTDEControlInterface(ROBOT_HOST)
-    rtde_r = RTDEReceiveInterface(ROBOT_HOST)
+    # rtde_r = RTDEReceiveInterface(ROBOT_HOST)
     rtde_io = RTDEIO(ROBOT_HOST)
     
     print("Creating gripper...")
@@ -134,61 +134,61 @@ def main():
     gripper_min = gripper.get_min_position()
     try:
         while True:
-            if rtde_r.getRobotMode() == 7:
-                # Read motion state from SpaceMouse
-                motion_state = sm.get_motion_state_transformed()
-                force = np.array(rtde_r.getActualTCPForce())
+            # if rtde_r.getRobotMode() == 7:
+            # Read motion state from SpaceMouse
+            motion_state = sm.get_motion_state_transformed()
+            # force = np.array(rtde_r.getActualTCPForce())
 
-                print("Motion state: ", motion_state)
-                print("Force: ", force)
-                if force[2] > 20 and motion_state[2] < 0: #if there is a large force in z direction, stop the robot from moving downwards
-                    motion_state[2] = 0 #disable downward movement
+            print("Motion state: ", motion_state)
+            # print("Force: ", force)
+            # if force[2] > 20 and motion_state[2] < 0: #if there is a large force in z direction, stop the robot from moving downwards
+            #     motion_state[2] = 0 #disable downward movement
 
-                #send command to robot 
-                rtde_c.speedL(motion_state, acceleration = 15, time = 0.01) #adjust the acceleration if required 
+            #send command to robot 
+            rtde_c.speedL(motion_state, acceleration = 15, time = 0.01) #adjust the acceleration if required 
 
-                #get TCP velocity of robot
-                actual_velocity = rtde_r.getActualTCPSpeed()
-                actual_velocity = [0 if abs(x) < 0.01 else x for x in actual_velocity] #filter out extremely small numbers
-                print("Current velocity vector: " , actual_velocity)
+            # #get TCP velocity of robot
+            # actual_velocity = rtde_r.getActualTCPSpeed()
+            # actual_velocity = [0 if abs(x) < 0.01 else x for x in actual_velocity] #filter out extremely small numbers
+            # print("Current velocity vector: " , actual_velocity)
 
-                #get TCP pose of robot
-                #actual_pose = rtde_r.getActualTCPPose()
-                #print(actual_pose)
+            #get TCP pose of robot
+            #actual_pose = rtde_r.getActualTCPPose()
+            #print(actual_pose)
 
-                #get joint pose of robot 
-                # joint_pose = rtde_r.getActualQ()
-                # print("Current Joint Pose:", joint_pose)
+            #get joint pose of robot 
+            # joint_pose = rtde_r.getActualQ()
+            # print("Current Joint Pose:", joint_pose)
 
-  
-                if sm.is_button_pressed(0):
-                    gripper_position += 3
-                    gripper.move(gripper_position, 155, 255)
 
-                if sm.is_button_pressed(1):
-                    gripper_position -= 3
-                    gripper.move(gripper_position, 155, 255)
+            if sm.is_button_pressed(0):
+                gripper_position += 3
+                gripper.move(gripper_position, 155, 255)
 
-                if gripper_position < gripper_min:
-                    gripper_position = gripper_min
+            if sm.is_button_pressed(1):
+                gripper_position -= 3
+                gripper.move(gripper_position, 155, 255)
 
-                if gripper_position > gripper_max:
-                    gripper_position = gripper_max
+            if gripper_position < gripper_min:
+                gripper_position = gripper_min
 
-                print(f"Gripper Position ({gripper_min} to {gripper_max}): {gripper.get_current_position()}")
-                
-                if gripper.is_gripping(): 
-                    print("Gripping object")
-                
-                else: 
-                    print("Not gripping object")
+            if gripper_position > gripper_max:
+                gripper_position = gripper_max
 
-                #wait awhile before proceeding 
-                time.sleep(1/100)
+            print(f"Gripper Position ({gripper_min} to {gripper_max}): {gripper.get_current_position()}")
+            
+            if gripper.is_gripping(): 
+                print("Gripping object")
+            
+            else: 
+                print("Not gripping object")
 
-            else:
-                print("Robot is not ready.")
-                time.sleep(1)  # Wait longer if robot is not ready
+            #wait awhile before proceeding 
+            time.sleep(1/100)
+
+            # else:
+            #     print("Robot is not ready.")
+            #     time.sleep(1)  # Wait longer if robot is not ready
 
     except KeyboardInterrupt:
         # Handle graceful shutdown here

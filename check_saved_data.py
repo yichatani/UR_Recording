@@ -156,14 +156,47 @@ def visualize_images_depths(wrist_imgs, depth_imgs):
     cv2.destroyAllWindows()
 
 
+# =================== 可视化三个视图 ===================
+def visualize_all_views(wrist_imgs, wrist_depths, global_imgs):
+    num_frames = len(wrist_imgs)
+    print(f"Visualizing {num_frames} frames (press ESC to quit)...")
+
+    for i in range(num_frames):
+        wrist = wrist_imgs[i]
+        depth = wrist_depths[i]
+        global_ = global_imgs[i]
+
+        # 深度图归一化并伪彩色
+        depth_norm = cv2.normalize(depth, None, 0, 255, cv2.NORM_MINMAX)
+        depth_norm = depth_norm.astype(np.uint8)
+        depth_color = cv2.applyColorMap(depth_norm, cv2.COLORMAP_JET)
+
+        # 水平拼接三个视图
+        combined = np.hstack((
+            cv2.putText(wrist.copy(), "Wrist RGB", (10, 30),
+                        cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2),
+            cv2.putText(depth_color.copy(), "Wrist Depth", (10, 30),
+                        cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 255), 2),
+            cv2.putText(global_.copy(), "Global RGB", (10, 30),
+                        cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 0, 0), 2)
+        ))
+
+        cv2.imshow("Wrist RGB | Wrist Depth | Global RGB", combined)
+        key = cv2.waitKey(50)
+        if key == 27:  # ESC
+            break
+    cv2.destroyAllWindows()
+
+
 # =================== 主函数 ===================
 def main():
     wrist_imgs, wrist_depths, global_imgs, eef_pose, meta = load_data(data_dir)
     inspect_robot_data(eef_pose)
     analyze_timestamps(meta)
-    visualize_images(wrist_imgs, global_imgs)
-    # visualize_wrist_image(wrist_imgs)
+    # visualize_images(wrist_imgs, global_imgs)
+    # # visualize_wrist_image(wrist_imgs)
     # visualize_images_depths(wrist_imgs, wrist_depths)
+    visualize_all_views(wrist_imgs, wrist_depths, global_imgs)
     print("✅ Done.")
 
 
