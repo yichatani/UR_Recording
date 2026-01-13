@@ -121,7 +121,7 @@ def main():
     # Initialize RTDEControlInterface
     rtde_c = RTDEControlInterface(ROBOT_HOST)
     # rtde_r = RTDEReceiveInterface(ROBOT_HOST)
-    rtde_io = RTDEIO(ROBOT_HOST)
+    # rtde_io = RTDEIO(ROBOT_HOST)
     
     print("Creating gripper...")
     gripper = robotiq_gripper.RobotiqGripper()
