@@ -1,5 +1,5 @@
 from rtde_control import RTDEControlInterface
-# from rtde_receive import RTDEReceiveInterface 
+from rtde_receive import RTDEReceiveInterface 
 from rtde_io import RTDEIOInterface as RTDEIO
 import robotiq_gripper
 from spnav import spnav_open, spnav_poll_event, spnav_close, SpnavMotionEvent, SpnavButtonEvent
@@ -120,9 +120,13 @@ def main():
     sm.start()
     # Initialize RTDEControlInterface
     rtde_c = RTDEControlInterface(ROBOT_HOST)
-    # rtde_r = RTDEReceiveInterface(ROBOT_HOST)
+    rtde_r = RTDEReceiveInterface(ROBOT_HOST)
     # rtde_io = RTDEIO(ROBOT_HOST)
     
+    INITIAL_JOINT = np.array([-0.27863771120180303, -0.7311265033534546, -1.7176012992858887, 
+                              -1.3525208991817017, 1.5881447792053223, 1.4712841510772705])  # Example initial pose [x, y, z, rx, ry, rz]
+    rtde_c.moveJ(INITIAL_JOINT)
+
     print("Creating gripper...")
     gripper = robotiq_gripper.RobotiqGripper()
     print("Connecting to gripper...")
@@ -152,11 +156,11 @@ def main():
             # actual_velocity = [0 if abs(x) < 0.01 else x for x in actual_velocity] #filter out extremely small numbers
             # print("Current velocity vector: " , actual_velocity)
 
-            #get TCP pose of robot
-            #actual_pose = rtde_r.getActualTCPPose()
-            #print(actual_pose)
+            # # get TCP pose of robot
+            # actual_pose = rtde_r.getActualTCPPose()
+            # print(f"Actual Pose: {actual_pose}")
 
-            #get joint pose of robot 
+            # # get joint pose of robot 
             # joint_pose = rtde_r.getActualQ()
             # print("Current Joint Pose:", joint_pose)
 
@@ -198,3 +202,6 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+# Actual Pose: [0.1475268964481407, -0.1805609486055407, 0.663444656308677, 0.19631189756161035, 2.2288013244459117, -0.1945409757790119]
+# Current Joint Pose: [-0.27863771120180303, -0.7311265033534546, -1.7176012992858887, -1.3525208991817017, 1.5881447792053223, 1.4712841510772705]
