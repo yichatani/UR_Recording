@@ -3,9 +3,9 @@ import numpy as np
 import torch
 from lerobot.datasets.lerobot_dataset import LeRobotDataset
 
-DATA_ROOT = "/home/ani/UR_Recording/data/drawer_opening"
+DATA_ROOT = "/home/ani/UR_Recording/data/hang_cup"
 REPO_ID = "ani/sid"
-EP_ID = 17
+EP_ID = 0
 
 ds = LeRobotDataset(repo_id=REPO_ID, root=DATA_ROOT)
 
@@ -29,17 +29,20 @@ names = ["x", "y", "z", "qx", "qy", "qz", "qw", "width"]
 
 rr.init(f"lerobot_vis_ep{EP_ID}", spawn=True)
 
-for global_i in idxs:
-    sample = ds[int(global_i)]
+for wrist_i in idxs:
+    sample = ds[int(wrist_i)]
 
     frame_i = int(sample["frame_index"].item()) if hasattr(sample["frame_index"], "item") else int(sample["frame_index"])
     rr.set_time("frame", sequence=frame_i)
 
     # --- 相机 ---
     rgb_wrist = chw_to_hwc_uint8(sample["rgb_wrist"])
-    rgb_global = chw_to_hwc_uint8(sample["rgb_global"])
     rr.log("cam/wrist", rr.Image(rgb_wrist))
-    rr.log("cam/global", rr.Image(rgb_global))
+    if "rgb_global" in sample:
+        rgb_global = chw_to_hwc_uint8(sample["rgb_global"])
+        rr.log("cam/global", rr.Image(rgb_global))
+    # rgb_global = chw_to_hwc_uint8(sample["rgb_global"])
+    # rr.log("cam/global", rr.Image(rgb_global))
 
     # --- state: 8 个标量 ---
     st = sample["observation.state"].detach().cpu().numpy().astype(np.float32).reshape(-1)

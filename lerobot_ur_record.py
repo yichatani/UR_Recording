@@ -36,13 +36,14 @@ def initialize_dataset(root_dir, save_depth=True):
     ee_names = ["x", "y", "z", "qx", "qy", "qz", "qw", "width"]
 
     features_dict = {
-        "rgb_wrist": {"dtype": "video", "shape": (224, 224, 3), "names": ["height", "width", "channel"]},
-        "rgb_global": {"dtype": "video", "shape": (224, 224, 3), "names": ["height", "width", "channel"]},
+        "rgb_wrist": {"dtype": "video", "shape": (540, 960, 3), "names": ["height", "width", "channel"]},
+        "rgb_global": {"dtype": "video", "shape": (1536, 2048, 3), "names": ["height", "width", "channel"]},
         "observation.state": {"dtype": "float32", "shape": (8,), "names": ee_names},
         "action": {"dtype": "float32", "shape": (8,), "names": ee_names},
     }
     if save_depth:
-        features_dict["depth_wrist"]  = {"dtype": "float32", "shape": (224, 224), "names": ["height", "width"]}
+        # features_dict["depth_wrist"]  = {"dtype": "float32", "shape": (540, 960), "names": ["height", "width"]}
+        features_dict["depth_wrist"]  = {"dtype": "uint16", "shape": (540, 960), "names": ["height", "width"]}
 
     if root_dir.exists() and not (root_dir / "meta" / "info.json").exists():
         shutil.rmtree(root_dir)
@@ -106,14 +107,14 @@ def callback(wrist_color_msg, wrist_depth_msg, global_color_msg):
 
     # 转换图像
     wrist_img = bridge.imgmsg_to_cv2(wrist_color_msg, "bgr8")
-    wrist_img = cv2.resize(wrist_img, (224, 224), interpolation=cv2.INTER_LINEAR)
+    # wrist_img = cv2.resize(wrist_img, (224, 224), interpolation=cv2.INTER_LINEAR)
     wrist_img = cv2.cvtColor(wrist_img, cv2.COLOR_BGR2RGB).astype(np.uint8)
     
     wrist_depth = bridge.imgmsg_to_cv2(wrist_depth_msg)
-    wrist_depth = cv2.resize(wrist_depth, (224, 224), interpolation=cv2.INTER_NEAREST).astype(np.float32)
+    # wrist_depth = cv2.resize(wrist_depth, (224, 224), interpolation=cv2.INTER_NEAREST).astype(np.float32)
     
     global_img = bridge.imgmsg_to_cv2(global_color_msg, "bgr8")
-    global_img = cv2.resize(global_img, (224, 224), interpolation=cv2.INTER_LINEAR)
+    # global_img = cv2.resize(global_img, (224, 224), interpolation=cv2.INTER_LINEAR)
     global_img = cv2.cvtColor(global_img, cv2.COLOR_BGR2RGB).astype(np.uint8)
 
     # 获取机器人状态
@@ -218,12 +219,12 @@ def main():
 
     instruction = input("Input language instruction: ")
     
-    DATASET_ROOT = "/home/ani/UR_Recording/data/drawer_opening"  
+    DATASET_ROOT = "/home/ani/UR_Recording/data/calibration"  
     dataset = initialize_dataset(DATASET_ROOT, save_depth=True)
     rospy.loginfo(f"Starting new recording at episode_{dataset.num_episodes}")
 
     wrist_color_sub = message_filters.Subscriber("/camera/color/image_raw", Image)
-    wrist_depth_sub = message_filters.Subscriber("/camera/depth/image_rect_raw", Image)
+    wrist_depth_sub = message_filters.Subscriber("/camera/aligned_depth_to_color/image_raw", Image)
     global_color_sub = message_filters.Subscriber("/rgb/image_raw", Image)
 
     ts = message_filters.ApproximateTimeSynchronizer(
