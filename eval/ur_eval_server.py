@@ -32,12 +32,12 @@ ROBOT_HOST = "192.168.56.101"
 
 # Policy server addresses
 SEG_ADDR = "tcp://192.168.56.55:5556"      # Send obs to seg server
-ACTION_ADDR = "tcp://192.168.56.60:5557"   # Receive action from policy
+ACTION_BIND = "tcp://192.168.56.60:5557"   # Receive action from policy
 
 # Control parameters
 OBS_STEPS = 1      # Number of observation history frames
 IMG_STEPS = 1      # Number of image history frames
-CONTROL_HZ = 30    # Control frequency (Hz)
+CONTROL_HZ = 5    # Control frequency (Hz)
 # ACTION_SCALE = 1.0  # Scale factor for action execution
 
 # Stop detection parameters
@@ -105,9 +105,9 @@ class PolicyControlNode:
         rospy.loginfo(f"Connected to SegServer at {SEG_ADDR}")
         
         # Connect to policy server for actions
-        self.action_sock = self.ctx.socket(zmq.REQ)
-        self.action_sock.connect(ACTION_ADDR)
-        rospy.loginfo(f"Connected to PolicyServer at {ACTION_ADDR}")
+        self.action_sock = self.ctx.socket(zmq.REP)
+        self.action_sock.bind(ACTION_BIND)
+        rospy.loginfo(f"Waiting for Policy on {ACTION_BIND}")
         
         # Observation buffers
         self.state_buf = deque(maxlen=OBS_STEPS)
@@ -145,6 +145,9 @@ class PolicyControlNode:
         wrist_img = cv2.cvtColor(wrist_img, cv2.COLOR_BGR2RGB).astype(np.uint8)
         
         wrist_depth = self.bridge.imgmsg_to_cv2(wrist_depth_msg)
+
+        # print(f"{wrist_depth=}")
+        # exit()
         
         # Get robot state
         eef_pose = self.rtde_r.getActualTCPPose()  # [x, y, z, rx, ry, rz]
@@ -154,8 +157,7 @@ class PolicyControlNode:
         
         gripper_width = self.gripper.get_current_position()
         
-        # Build 8D state: [x, y, z, qx, qy, qz, qw, width]
-        state = np.concatenate([eef_pose[:3], quat_xyzw, [gripper_width]]).astype(np.float32)
+        state = np.array([gripper_width])
         
         # Update buffers
         self.state_buf.append(state)
@@ -206,23 +208,25 @@ class PolicyControlNode:
         # Apply position delta
         # target_pos = current_pos + action[:3] * ACTION_SCALE
         target_pos = current_pos + action[:3]
+        target_quat = current_quat + action[3:7]
         
         # Apply quaternion delta
-        current_rot = R.from_quat(current_quat)
-        delta_rot = R.from_quat(action[3:7])
-        target_rot = current_rot * delta_rot
+        target_rot = R.from_quat(target_quat)
         target_rotvec = target_rot.as_rotvec()
+        # print(f"{target_rotvec=}")
         
         # Build target pose
         target_pose = np.concatenate([target_pos, target_rotvec])
+        print(f"{target_pose=}")
         
         # Execute motion
         try:
-            self.rtde_c.moveL(target_pose.tolist(), speed=0.1, acceleration=0.3)
+            self.rtde_c.moveL(target_pose.tolist(), speed=0.05, acceleration=0.15)
             
             # Set gripper
-            gripper_width = action[7]
-            self.gripper.move(gripper_width, 155, 255)
+            # gripper_width = action[7]
+            gripper_width = int(np.clip(np.round(action[7]), 0, 255))
+            self.gripper.move(gripper_width, 155, 155)
             # if gripper_width < 3:
             #     self.gripper.move(0, 155, 255)  # Close
             # else:
@@ -317,6 +321,7 @@ class PolicyControlNode:
             # Execute action from queue
             if len(self.action_queue) > 0:
                 action = self.action_queue.popleft()
+                print(f"Executing action: {action}")
                 success = self.apply_action(action)
                 
                 if success:
@@ -367,6 +372,9 @@ def main():
         control_mode = "open_loop"
         actions_per_inference = 10
         
+        # print("Ready to start control loop. Press Ctrl+C to stop.")
+        # exit()
+
         node.run_control_loop(mode=control_mode, actions_per_inference=actions_per_inference)
         
     except KeyboardInterrupt:
