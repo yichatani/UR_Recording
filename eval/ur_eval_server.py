@@ -178,17 +178,39 @@ class PolicyControlNode:
         return obs
     
     
-    def request_actions(self, obs):
-        """Request actions from policy server"""
+    # def request_actions(self, obs):
+    #     """Request actions from policy server"""
+    #     # Send obs to seg server
+    #     self.seg_sock.send_pyobj(obs)
+    #     self.seg_sock.recv()
+        
+    #     # Receive result from policy server
+    #     result = self.action_sock.recv_pyobj()
+    #     self.action_sock.send(b"ok")
+    #
+    #     return result
+    
+    def request_actions(self, obs, require_action=False):
+        """Request actions from policy server
+        
+        Args:
+            obs: observation dict
+            require_action: whether to request action prediction from policy
+        """
+        # Add require_action flag to obs
+        obs["require_action"] = require_action
+        
         # Send obs to seg server
         self.seg_sock.send_pyobj(obs)
         self.seg_sock.recv()
         
-        # Receive result from policy server
-        result = self.action_sock.recv_pyobj()
-        self.action_sock.send(b"ok")
-        
-        return result
+        if require_action:
+            # Receive result from policy server
+            result = self.action_sock.recv_pyobj()
+            self.action_sock.send(b"ok")
+            return result
+        else:
+            return None
     
     
     def apply_action(self, action):
@@ -254,6 +276,13 @@ class PolicyControlNode:
         while not rospy.is_shutdown():
             self.step_count += 1
             
+            # Get current observation
+            obs = self.get_observation()
+            
+            if obs is None:
+                rate.sleep()
+                continue
+            
             # Check if we need new actions
             need_new_inference = False
             
@@ -267,56 +296,32 @@ class PolicyControlNode:
                     actions_executed_since_last_inference >= actions_per_inference
                 )
             
-            # Request new actions if needed
-            if need_new_inference:
-                obs = self.get_observation()
+            # Always send obs to seg server, but only request actions when needed
+            try:
+                result = self.request_actions(obs, require_action=need_new_inference)
                 
-                if obs is not None:
-                    rospy.loginfo(f"[Step {self.step_count}] Requesting new actions...")
+                if need_new_inference and result is not None:
+                    action_seq = result['action']  # (horizon, 9)
                     
-                    try:
-                        result = self.request_actions(obs)
-                        
-                        action_seq = result['action']  # (horizon, 9)
-                        
-                        rospy.loginfo("#" * 60)
-                        rospy.loginfo(f"Received action sequence shape: {action_seq.shape}")
-                        rospy.loginfo("#" * 60)
-                        
-                        # For closed loop, clear old actions
-                        if mode == "closed_loop":
-                            self.action_queue.clear()
-                            actions_executed_since_last_inference = 0
-                        
-                        # Add new actions to queue
-                        for action in action_seq:
-                            self.action_queue.append(action)
-                        
-                        rospy.loginfo(f"Added {len(action_seq)} actions to queue")
-                        
-                        # # Check stop signal (from action[:, 8])
-                        # # We use the first action's stop label as the stop signal
-                        # if action_seq.shape[0] > 0:
-                        #     stop_signal = action_seq[0, 8]
-                            
-                        #     if stop_signal > STOP_THRESHOLD:
-                        #         self.total_stop_count += 1
-                                
-                        #         rospy.logwarn(f"Stop signal detected!")
-                        #         rospy.logwarn(f"  Signal value: {stop_signal:.4f} > {STOP_THRESHOLD}")
-                        #         rospy.logwarn(f"  Total stop count: {self.total_stop_count}/{CUMULATIVE_STOP_COUNT}")
-                                
-                        #         if self.total_stop_count >= CUMULATIVE_STOP_COUNT:
-                        #             rospy.logwarn(f"Reached {CUMULATIVE_STOP_COUNT} stop detections")
-                        #             rospy.logwarn("Stopping control loop")
-                        #             break
-                        #     else:
-                        #         rospy.loginfo(f"Stop signal below threshold: {stop_signal:.4f} <= {STOP_THRESHOLD}")
+                    rospy.loginfo("#" * 60)
+                    rospy.loginfo(f"Received action sequence shape: {action_seq.shape}")
+                    rospy.loginfo("#" * 60)
                     
-                    except Exception as e:
-                        rospy.logerr(f"Failed to get actions: {e}")
-                        import traceback
-                        traceback.print_exc()
+                    # For closed loop, clear old actions
+                    if mode == "closed_loop":
+                        self.action_queue.clear()
+                        actions_executed_since_last_inference = 0
+                    
+                    # Add new actions to queue
+                    for action in action_seq:
+                        self.action_queue.append(action)
+                    
+                    rospy.loginfo(f"Added {len(action_seq)} actions to queue")
+            
+            except Exception as e:
+                rospy.logerr(f"Failed to get actions: {e}")
+                import traceback
+                traceback.print_exc()
             
             # Execute action from queue
             if len(self.action_queue) > 0:
@@ -358,11 +363,11 @@ class PolicyControlNode:
 # =====================================================================
 def main():
     try:
-        node = PolicyControlNode()
+        policy_node = PolicyControlNode()
         
         # Wait for observations to accumulate
         rospy.loginfo("Waiting for observations...")
-        while len(node.state_buf) < OBS_STEPS and not rospy.is_shutdown():
+        while len(policy_node.state_buf) < OBS_STEPS and not rospy.is_shutdown():
             rospy.sleep(0.1)
         
         rospy.loginfo("Observations ready, starting control loop")
@@ -375,7 +380,7 @@ def main():
         # print("Ready to start control loop. Press Ctrl+C to stop.")
         # exit()
 
-        node.run_control_loop(mode=control_mode, actions_per_inference=actions_per_inference)
+        policy_node.run_control_loop(mode=control_mode, actions_per_inference=actions_per_inference)
         
     except KeyboardInterrupt:
         rospy.loginfo("Interrupted by user")
@@ -384,8 +389,8 @@ def main():
         import traceback
         traceback.print_exc()
     finally:
-        if 'node' in locals():
-            node.shutdown()
+        if 'policy_node' in locals():
+            policy_node.shutdown()
 
 
 if __name__ == "__main__":
