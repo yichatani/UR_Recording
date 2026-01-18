@@ -48,7 +48,7 @@ IMG_STEPS = 1
 CONTROL_HZ = 5
 
 # Gradient field parameters
-GRAD_NORM_THRESHOLD = 0.025
+GRAD_NORM_THRESHOLD = 0.030
 GRAD_STEP_SIZE = 0.1
 MAX_GRAD_ITERATIONS = 150
 
@@ -276,9 +276,13 @@ class HybridControlNode:
         obs["require_obj_pose"] = need_obj_pose
         obs["require_action"] = False
 
+        print("Requesting observation with obj_pose, need_obj_pose =", need_obj_pose)
+
         # Send to pose server
         self.pose_sock.send_pyobj(obs)
         
+        print("Sent observation to pose server")
+
         if need_obj_pose:
             # Receive result with obj_pose from vision
             result = self.pose_sock.recv_pyobj()
@@ -491,6 +495,9 @@ class HybridControlNode:
             # Get observation with obj_pose
             obs = self.request_observation_with_obj_pose(force_request=force_vision_update)
             
+            # print(f"{obs=}")
+            # exit()
+
             if obs is None or "obj_pose" not in obs:
                 rospy.logwarn("No observation available, waiting...")
                 rate.sleep()
@@ -585,12 +592,15 @@ class HybridControlNode:
             need_new_inference = False
             if mode == "open_loop":
                 need_new_inference = (len(self.action_queue) == 0)
-            elif mode == "closed_loop":
+            elif mode == "close_loop":
+                print(f"{len(self.action_queue)=}, {actions_executed_since_last_inference=}, {actions_per_inference=}")
                 need_new_inference = (
                     len(self.action_queue) == 0 or
                     actions_executed_since_last_inference >= actions_per_inference
                 )
+                
             
+            print(f"\n[Step {self.step_count}] Need new inference: {need_new_inference}")
             # ALWAYS send obs to seg server, but only request action when needed
             try:
                 result = self.request_actions(obs, require_action=need_new_inference)
@@ -603,7 +613,7 @@ class HybridControlNode:
                     rospy.loginfo(f"Received {len(action_seq)} actions")
                     rospy.loginfo("#" * 60)
                     
-                    if mode == "closed_loop":
+                    if mode == "close_loop":
                         self.action_queue.clear()
                         actions_executed_since_last_inference = 0
                     
@@ -619,6 +629,7 @@ class HybridControlNode:
             if len(self.action_queue) > 0:
                 action = self.action_queue.popleft()
                 success = self.apply_policy_action(action)
+                print(f"[Step {self.step_count}] Executed action: pos_delta={action[:3]}, gripper={action[7]}, stop={action[8]}")
                 
                 if success:
                     actions_executed_since_last_inference += 1
@@ -662,15 +673,16 @@ def main():
         # Phase 1: Gradient field
         success = node.run_gradient_field_phase()
         
-        if not success:
-            cprint("Gradient field phase failed", "red")
-            return
+        # if not success:
+        #     cprint("Gradient field phase failed", "red")
+        #     return
         
         cprint("\nTransitioning to policy control in 2 seconds...", "yellow")
         rospy.sleep(2.0)
         
         # Phase 2: Policy control
         node.run_policy_phase(mode="open_loop", actions_per_inference=10)
+        # node.run_policy_phase(mode="close_loop", actions_per_inference=5)
         
     except KeyboardInterrupt:
         rospy.loginfo("Interrupted by user")
