@@ -3,9 +3,9 @@ import numpy as np
 import torch
 from lerobot.datasets.lerobot_dataset import LeRobotDataset
 
-DATA_ROOT = "/home/ani/UR_Recording/data/sid_banana_picking"
+DATA_ROOT = "/home/ani/UR_Recording/data_baseline/multi_pick"
 REPO_ID = "ani/sid"
-EP_ID = 0
+EP_ID = 24
 
 ds = LeRobotDataset(repo_id=REPO_ID, root=DATA_ROOT)
 
@@ -41,8 +41,6 @@ for wrist_i in idxs:
     if "rgb_global" in sample:
         rgb_global = chw_to_hwc_uint8(sample["rgb_global"])
         rr.log("cam/global", rr.Image(rgb_global))
-    # rgb_global = chw_to_hwc_uint8(sample["rgb_global"])
-    # rr.log("cam/global", rr.Image(rgb_global))
 
     # --- state: 8 个标量 ---
     st = sample["observation.state"].detach().cpu().numpy().astype(np.float32).reshape(-1)
@@ -65,7 +63,12 @@ for wrist_i in idxs:
     quat_act = ac[3:7]
     rr.log("robot/eef_action", rr.Transform3D(translation=pos_act, rotation=quat_act))
 
-    # --- 深度图（可选）---
-    if "depth_wrist" in sample:
+    # --- 深度图（兼容新旧格式）---
+    if "depth_global" in sample:
+        # 新格式：global depth
+        depth = sample["depth_global"].detach().cpu().numpy().astype(np.float32)
+        rr.log("depth/global", rr.Image(depth))
+    elif "depth_wrist" in sample:
+        # 旧格式：wrist depth
         depth = sample["depth_wrist"].detach().cpu().numpy().astype(np.float32)
         rr.log("depth/wrist", rr.Image(depth))

@@ -123,9 +123,10 @@ def main():
     rtde_r = RTDEReceiveInterface(ROBOT_HOST)
     # rtde_io = RTDEIO(ROBOT_HOST)
     
-    INITIAL_JOINT = np.array([-0.27863771120180303, -0.7311265033534546, -1.7176012992858887, 
-                              -1.3525208991817017, 1.5881447792053223, 1.4712841510772705])  # Example initial pose [x, y, z, rx, ry, rz]
-    rtde_c.moveJ(INITIAL_JOINT)
+    INITIAL_JOINT = np.array([-0.4882410208331507, -1.0156464141658326, -1.6417837142944336, 
+                              -1.2842187744430085, 1.7657989263534546, 1.3109745979309082])  # Example initial pose [x, y, z, rx, ry, rz]
+    rtde_c.moveJ(INITIAL_JOINT, speed=1, acceleration=0.5)
+    
 
     print("Creating gripper...")
     gripper = robotiq_gripper.RobotiqGripper()
