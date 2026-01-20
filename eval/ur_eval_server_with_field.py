@@ -45,10 +45,10 @@ MODEL_PATH = "/home/ani/RSS2026/GradientField/log/pure_eqm_best.pth"
 # Control parameters
 OBS_STEPS = 1
 IMG_STEPS = 1
-CONTROL_HZ = 5
+CONTROL_HZ = 10
 
 # Gradient field parameters
-GRAD_NORM_THRESHOLD = 0.030
+GRAD_NORM_THRESHOLD = 0.015
 GRAD_STEP_SIZE = 0.1
 MAX_GRAD_ITERATIONS = 150
 
