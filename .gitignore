@@ -1,5 +1,7 @@
 data/
 data_baseline/
+data_wj/
+kwj/
 __pycache__/
 *.pyc
 lerobot_dataset/

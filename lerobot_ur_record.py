@@ -217,7 +217,7 @@ def main():
 
     instruction = input("Input language instruction: ")
     
-    DATASET_ROOT = "/home/ani/UR_Recording/data_baseline/multi_pick"
+    DATASET_ROOT = "/home/ani/UR_Recording/data_wj/example"
     dataset = initialize_dataset(DATASET_ROOT, save_depth=True)
     rospy.loginfo(f"Starting new recording at episode_{dataset.num_episodes}")
 

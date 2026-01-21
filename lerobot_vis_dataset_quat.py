@@ -3,7 +3,7 @@ import numpy as np
 import torch
 from lerobot.datasets.lerobot_dataset import LeRobotDataset
 
-DATA_ROOT = "/home/ani/UR_Recording/data_baseline/multi_pick"
+DATA_ROOT = "/home/ani/UR_Recording/data_wj/example"
 REPO_ID = "ani/sid"
 EP_ID = 24
 
