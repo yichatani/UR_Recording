@@ -3,9 +3,9 @@ import numpy as np
 import torch
 from lerobot.datasets.lerobot_dataset import LeRobotDataset
 
-DATA_ROOT = "/home/ani/UR_Recording/data_wj/example"
+DATA_ROOT = "/home/ani/UR_Recording/data_baseline/pick_banana_into_canvas"
 REPO_ID = "ani/sid"
-EP_ID = 24
+EP_ID = 0
 
 ds = LeRobotDataset(repo_id=REPO_ID, root=DATA_ROOT)
 

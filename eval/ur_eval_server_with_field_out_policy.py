@@ -48,13 +48,20 @@ IMG_STEPS = 1
 CONTROL_HZ = 10
 
 # Gradient field parameters
-GRAD_NORM_THRESHOLD = 0.003
+GRAD_NORM_THRESHOLD = 0.005
 GRAD_STEP_SIZE = 0.1
 MAX_GRAD_ITERATIONS = 150
 
 # Policy parameters
 STOP_THRESHOLD = 0.5
 CUMULATIVE_STOP_COUNT = 2
+
+# Termination detection parameters
+TERMINATION_WINDOW_SIZE = 5
+TERMINATION_POS_DELTA_THRESHOLD = 0.0005  # 0.5mm - based on log showing ~0.0001-0.0003 at convergence
+TERMINATION_QUAT_DELTA_THRESHOLD = 0.0002  # based on log showing ~0.00002-0.00008 at convergence
+TERMINATION_GRIPPER_DELTA_THRESHOLD = 2.0  # gripper units - based on log showing stable ~137
+TERMINATION_STOP_THRESHOLD = 0.99
 
 # Camera-TCP extrinsic
 # Format: [x, y, z, qx, qy, qz, qw]
@@ -64,6 +71,9 @@ CAMERA_TCP_EXTRINSIC = np.array([-0.1841869894889, 0.0017635353786, -0.155264230
 # Motion parameters
 MOVE_SPEED = 0.15
 MOVE_ACCELERATION = 0.3
+
+INITIAL_JOINT = np.array([-0.4882410208331507, -1.0156464141658326, -1.6417837142944336, 
+                              -1.2842187744430085, 1.7657989263534546, 1.3109745979309082])  # Example initial pose [x, y, z, rx, ry, rz]
 
 # =====================================================================
 # Utility Functions
@@ -160,6 +170,9 @@ class HybridControlNode:
         self.rtde_c = RTDEControlInterface(ROBOT_HOST)
         self.rtde_r = RTDEReceiveInterface(ROBOT_HOST)
         
+        # Initial robot pose
+        self.rtde_c.moveJ(INITIAL_JOINT, speed=0.5, acceleration=0.25)
+
         # Gripper
         rospy.loginfo("Connecting to gripper...")
         self.gripper = robotiq_gripper.RobotiqGripper()
@@ -205,6 +218,9 @@ class HybridControlNode:
         self.last_quat = None
         self.step_count = 0
         self.total_stop_count = 0
+        
+        # Termination detection window
+        self.termination_window = deque(maxlen=TERMINATION_WINDOW_SIZE)
         
         # ROS subscribers
         wrist_color_sub = message_filters.Subscriber("/camera/color/image_raw", Image)
@@ -540,6 +556,73 @@ class HybridControlNode:
     # Phase 2: Policy Control
     # =====================================================================
     
+    def check_termination_condition(self, action):
+        """Check if policy should terminate based on sliding window of actions
+        
+        Args:
+            action: (9,) [dx, dy, dz, dqx, dqy, dqz, dqw, gripper, stop]
+        
+        Returns:
+            should_terminate: bool
+        """
+        pos_delta_norm = np.linalg.norm(action[:3])
+        quat_delta_norm = np.linalg.norm(action[3:7])
+        gripper_value = action[7]
+        stop_value = action[8]
+        
+        # Add current action metrics to window
+        self.termination_window.append({
+            'pos_delta_norm': pos_delta_norm,
+            'quat_delta_norm': quat_delta_norm,
+            'gripper': gripper_value,
+            'stop': stop_value
+        })
+        
+        # Need full window to check
+        if len(self.termination_window) < TERMINATION_WINDOW_SIZE:
+            return False
+        
+        # Check all conditions across window
+        window_list = list(self.termination_window)
+        
+        # 1. All position deltas should be small
+        all_pos_small = all(
+            w['pos_delta_norm'] < TERMINATION_POS_DELTA_THRESHOLD 
+            for w in window_list
+        )
+        
+        # 2. All quaternion deltas should be small
+        all_quat_small = all(
+            w['quat_delta_norm'] < TERMINATION_QUAT_DELTA_THRESHOLD 
+            for w in window_list
+        )
+        
+        # 3. Gripper should be stable (small variation)
+        gripper_values = [w['gripper'] for w in window_list]
+        gripper_range = max(gripper_values) - min(gripper_values)
+        gripper_stable = gripper_range < TERMINATION_GRIPPER_DELTA_THRESHOLD
+        
+        # 4. All stop values should be high
+        all_stop_high = all(
+            w['stop'] >= TERMINATION_STOP_THRESHOLD 
+            for w in window_list
+        )
+        
+        should_terminate = all_pos_small and all_quat_small and gripper_stable and all_stop_high
+        
+        if should_terminate:
+            cprint(f"\n{'='*60}", "green", attrs=["bold"])
+            cprint("TERMINATION CONDITION MET!", "green", attrs=["bold"])
+            cprint(f"  Window size: {TERMINATION_WINDOW_SIZE} steps", "green")
+            cprint(f"  Max pos_delta in window: {max(w['pos_delta_norm'] for w in window_list):.6f} < {TERMINATION_POS_DELTA_THRESHOLD}", "green")
+            cprint(f"  Max quat_delta in window: {max(w['quat_delta_norm'] for w in window_list):.6f} < {TERMINATION_QUAT_DELTA_THRESHOLD}", "green")
+            cprint(f"  Gripper range in window: {gripper_range:.2f} < {TERMINATION_GRIPPER_DELTA_THRESHOLD}", "green")
+            cprint(f"  Min stop in window: {min(w['stop'] for w in window_list):.4f} >= {TERMINATION_STOP_THRESHOLD}", "green")
+            cprint(f"{'='*60}\n", "green", attrs=["bold"])
+        
+        return should_terminate
+    
+    
     def apply_policy_action(self, action):
         """Apply policy action
         
@@ -575,7 +658,16 @@ class HybridControlNode:
         """Phase 2: Policy fine control"""
         cprint("\n" + "="*60, "blue", attrs=["bold"])
         cprint(f"PHASE 2: Policy Fine Control ({mode})", "blue", attrs=["bold"])
+        cprint(f"  Termination window: {TERMINATION_WINDOW_SIZE} steps", "blue")
+        cprint(f"  Termination thresholds:", "blue")
+        cprint(f"    pos_delta < {TERMINATION_POS_DELTA_THRESHOLD}", "blue")
+        cprint(f"    quat_delta < {TERMINATION_QUAT_DELTA_THRESHOLD}", "blue")
+        cprint(f"    gripper_range < {TERMINATION_GRIPPER_DELTA_THRESHOLD}", "blue")
+        cprint(f"    stop >= {TERMINATION_STOP_THRESHOLD}", "blue")
         cprint("="*60 + "\n", "blue", attrs=["bold"])
+        
+        # Clear termination window at start
+        self.termination_window.clear()
         
         # rate = rospy.Rate(CONTROL_HZ)
         actions_executed_since_last_inference = 0
@@ -629,15 +721,19 @@ class HybridControlNode:
             if len(self.action_queue) > 0:
                 action = self.action_queue.popleft()
                 success = self.apply_policy_action(action)
-                print(f"[Step {self.step_count}] Executed action: pos_delta={action[:3]}, quat_delta={action[3:7]}, gripper={action[7]}, stop={action[8]}")
+                print(f"[Step {self.step_count}] Executed action: pos_delta={action[:3]}, gripper={action[7]:.2f}, stop={action[8]:.4f}")
                 
                 if success:
                     actions_executed_since_last_inference += 1
                     
+                    # Check termination condition
+                    if self.check_termination_condition(action):
+                        cprint("Policy completed successfully!", "green", attrs=["bold"])
+                        return True
+                    
                     if self.step_count % 10 == 0:
                         pos_delta = np.linalg.norm(action[:3])
-                        quat_delta = np.linalg.norm(action[3:7])
-                        rospy.loginfo(f"[Step {self.step_count}] pos_delta={pos_delta:.6f}, quat_delta={quat_delta:.6f}, queue={len(self.action_queue)}")
+                        rospy.loginfo(f"[Step {self.step_count}] pos_delta={pos_delta:.6f}, queue={len(self.action_queue)}")
                 else:
                     rospy.logerr("Action failed, stopping")
                     break
@@ -645,6 +741,7 @@ class HybridControlNode:
             # rate.sleep()
         
         rospy.loginfo("Policy phase ended")
+        return False
     
     
     def shutdown(self):
@@ -682,8 +779,15 @@ def main():
         rospy.sleep(2.0)
         
         # Phase 2: Policy control
-        node.run_policy_phase(mode="open_loop", actions_per_inference=10)
+        policy_success = node.run_policy_phase(mode="open_loop", actions_per_inference=10)
         # node.run_policy_phase(mode="close_loop", actions_per_inference=5)
+        
+        node.rtde_c.moveJ(INITIAL_JOINT, speed=0.5, acceleration=0.25)
+        
+        if policy_success:
+            cprint("\n" + "="*60, "green", attrs=["bold"])
+            cprint("TASK COMPLETED SUCCESSFULLY!", "green", attrs=["bold"])
+            cprint("="*60 + "\n", "green", attrs=["bold"])
         
     except KeyboardInterrupt:
         rospy.loginfo("Interrupted by user")
