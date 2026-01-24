@@ -381,6 +381,23 @@ class HybridControlNode:
         rospy.logdebug(f"Updated obj_pose via motion: pos_delta={np.linalg.norm(obj_delta_pos_cam):.6f}")
     
 
+    def send_obs_to_seg_server(self, obs):
+        """Send observation to seg server (for visualization/logging)
+        
+        This should be called in both gradient field and policy phases
+        to keep the seg server updated with current observations.
+        
+        Args:
+            obs: observation dict
+        """
+        # Mark that we don't need action or obj_pose from this request
+        obs_copy = obs.copy()
+        obs_copy["require_action"] = False
+        obs_copy["require_obj_pose"] = False
+        
+        self.seg_sock.send_pyobj(obs_copy)
+        self.seg_sock.recv()
+
 
     def request_actions(self, obs, require_action=False):
         """Request actions from policy server
@@ -519,7 +536,10 @@ class HybridControlNode:
                 rospy.logwarn("No observation available, waiting...")
                 # rate.sleep()
                 continue
-            
+
+            # Send observation to seg server for visualization/logging
+            self.send_obs_to_seg_server(obs)
+
             obj_pose_camera = obs["obj_pose"]
             
             # Predict gradient

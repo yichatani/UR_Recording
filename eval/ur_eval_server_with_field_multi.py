@@ -64,10 +64,11 @@ CUMULATIVE_STOP_COUNT = 2
 
 # Termination detection parameters
 TERMINATION_WINDOW_SIZE = 5
-TERMINATION_POS_DELTA_THRESHOLD = 0.0005  # 0.5mm - based on log showing ~0.0001-0.0003 at convergence
+# TERMINATION_POS_DELTA_THRESHOLD = 0.0005  # 0.5mm - based on log showing ~0.0001-0.0003 at convergence
+TERMINATION_POS_DELTA_THRESHOLD = 0.001  # 1mm - more lenient
 TERMINATION_QUAT_DELTA_THRESHOLD = 0.0002  # based on log showing ~0.00002-0.00008 at convergence
 TERMINATION_GRIPPER_DELTA_THRESHOLD = 2.0  # gripper units - based on log showing stable ~137
-TERMINATION_STOP_THRESHOLD = 0.99
+TERMINATION_STOP_THRESHOLD = 0.98
 
 # Camera-TCP extrinsic
 # Format: [x, y, z, qx, qy, qz, qw]
@@ -390,6 +391,23 @@ class HybridControlNode:
         rospy.logdebug(f"Updated obj_pose via motion: pos_delta={np.linalg.norm(obj_delta_pos_cam):.6f}")
     
 
+    def send_obs_to_seg_server(self, obs):
+        """Send observation to seg server (for visualization/logging)
+        
+        This should be called in both gradient field and policy phases
+        to keep the seg server updated with current observations.
+        
+        Args:
+            obs: observation dict
+        """
+        # Mark that we don't need action or obj_pose from this request
+        obs_copy = obs.copy()
+        obs_copy["require_action"] = False
+        obs_copy["require_obj_pose"] = False
+        
+        self.seg_sock.send_pyobj(obs_copy)
+        self.seg_sock.recv()
+
 
     def request_actions(self, obs, require_action=False):
         """Request actions from policy server
@@ -531,6 +549,9 @@ class HybridControlNode:
                 rospy.logwarn("No observation available, waiting...")
                 # rate.sleep()
                 continue
+            
+            # Send observation to seg server (always happens, even in gradient field phase)
+            self.send_obs_to_seg_server(obs)
             
             obj_pose_camera = obs["obj_pose"]
             
@@ -798,8 +819,8 @@ def main():
             cprint(f"{'#'*60}\n", "magenta", attrs=["bold"])
             
             # Set current stage
-            node.current_stage = stage
             node.reset_for_new_stage()
+            node.current_stage = stage
             
             # Phase 1: Gradient field
             success = node.run_gradient_field_phase()
