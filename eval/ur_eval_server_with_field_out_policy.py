@@ -40,7 +40,8 @@ ACTION_BIND = "tcp://192.168.56.60:5557"   # Receive action/obj_pose from server
 POSE_ADDR = "tcp://192.168.56.55:5557"
 
 # Gradient field model
-MODEL_PATH = "/home/ani/RSS2026/GradientField/log/banana_pick.pth"
+# MODEL_PATH = "/home/ani/RSS2026/GradientField/log/banana_pick.pth"
+MODEL_PATH = "/home/ani/RSS2026/GradientField/log/open_canvas.pth"
 
 # Control parameters
 OBS_STEPS = 1

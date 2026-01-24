@@ -217,7 +217,7 @@ def main():
 
     instruction = input("Input language instruction: ")
     
-    DATASET_ROOT = "/home/ani/UR_Recording/data/sid_open_canvas_box"  
+    DATASET_ROOT = "/home/ani/UR_Recording/data/sid_drawer"  
     dataset = initialize_dataset(DATASET_ROOT, save_depth=True)
     rospy.loginfo(f"Starting new recording at episode_{dataset.num_episodes}")
 

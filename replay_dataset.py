@@ -14,7 +14,7 @@ from pynput import keyboard
 
 # Robot parameters
 ROBOT_HOST = "192.168.56.101"
-DATA_ROOT = "/home/ani/UR_Recording/data_wj/example"
+DATA_ROOT = "/home/ani/UR_Recording/data/sid_pour_water"
 REPO_ID = "ani/sid"
 
 # Replay parameters
